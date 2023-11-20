@@ -38,7 +38,37 @@ ls /dist
 uniflow
 ```
 
-이제 uniflow를 시작해봅시다. 먼저 ping을 시작하기 위해 다음 명령어를 사용하세요.
+ping 예제를 살펴봅시다!
+
+```yaml
+- kind: http
+  name: http
+  address: :8000
+  links:
+    io:
+      - name: router
+        port: in
+
+- kind: router
+  name: router
+  routes:
+    - method: GET
+      path: /ping
+      port: out[0]
+  links:
+    out[0]:
+      - name: pong
+        port: io
+
+- kind: snippet
+  name: pong
+  lang: json
+  code: |
+    "pong"
+```
+http, router, pong 노드를 정의합니다. yaml의 최상위 요소는 Node를 의미합니다. 
+
+이제 uniflow를 시작해봅시다. 
 
 ```bash
 ./dist/uniflow start --boot example/ping.yaml
