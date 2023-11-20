@@ -81,6 +81,4 @@ curl localhost:8000/ping
 pong#
 ```
 
-uniflow에는 흥미로운 예제들이 많이 포함되어 있습니다. 자세한 내용은 [예제](https://github.com/siyul-park/uniflow/tree/main/examples)를 참조하세요.
-
-첫걸음이었던 uniflow의 세계, 함께 더 멋진 여정을 떠나보세요! 🚀🌟
+uniflow에는 흥미로운 [예제](https://github.com/siyul-park/uniflow/tree/main/examples)들이 많이 포함되어 있습니다. 첫걸음이었던 uniflow의 세계, 함께 더 멋진 여정을 떠나보세요! 🚀🌟
