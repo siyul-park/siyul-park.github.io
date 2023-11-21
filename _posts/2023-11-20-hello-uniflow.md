@@ -5,7 +5,7 @@ date:   2023-11-20 18:44:43 +0900
 categories: low-code
 ---
 
-Low-Code의 향연이 펼쳐진 순간, [카카오 클라우드 AI 서비스](https://kakaocloud.com)의 미들웨어 개발은 기존의 지혜를 활용해 새로운 AI 서비스를 세상에 선보이기 위한 첫 발걸음이었습니다. [Spring Cloud Gateway](https://spring.io/projects/spring-cloud-gateway)를 활용하여 백엔드의 AI 모델 팀으로부터 도착한 API를 기반으로, 미들웨어에 추가 요구사항을 열정적으로 구현하였습니다. 각 AI 서비스는 설정 파일에 담긴 프로퍼티를 통해 어떤 미들웨어를 거쳐야 하는지 결정하며, 동적으로 설정을 가져오는 [Spring Cloud Config Server](https://spring.io/projects/spring-cloud-config)가 이를 가능케 했습니다.
+[카카오 클라우드 AI 서비스](https://kakaocloud.com)의 미들웨어 개발은 기존의 지혜를 활용해 새로운 AI 서비스를 세상에 선보이기 위한 첫 발걸음이었습니다. [Spring Cloud Gateway](https://spring.io/projects/spring-cloud-gateway)를 활용하여 백엔드의 AI 모델 팀으로부터 도착한 API를 기반으로, 미들웨어에 추가 요구사항을 열정적으로 구현하였습니다. 각 AI 서비스는 설정 파일에 담긴 프로퍼티를 통해 어떤 미들웨어를 거쳐야 하는지 결정하며, 동적으로 설정을 가져오는 [Spring Cloud Config Server](https://spring.io/projects/spring-cloud-config)가 이를 가능케 했습니다.
 
 초기에는 이미 갖춰진 미들웨어의 훌륭한 기능과 성능에 만족했지만, AI 서비스의 다양화로 각각의 특화된 추가 처리가 필요해지자, 수정이 번거로운 미들웨어 대신 신속하게 대응할 수 있는 새로운 서비스를 개발하기로 결정했습니다. 각 미들웨어 모듈을 동적으로 연결하고, 스크립트 작성이 가능한 Low-Code 서비스를 개발하여 복잡한 데이터 처리에 효과적으로 대응했습니다. 이 모든 도전과 실험은 PoC 단계부터 네이티브로 작성된 코드와 거의 차이 없이 탁월한 성과를 보여주었습니다.
 
@@ -66,7 +66,7 @@ uniflow
   code: |
     "pong"
 ```
-http 노드는 http server를 :8000에서 실행하며, 패킷을 router 노드로 전달합니다. router 노드는 패킷이 등록된 경로와 동일한지 확인한 후 pong 노드로 패킷을 전달 합니다. pong 노드는 최종 결과인 "pong"을 생산하여 응답합니다.
+http 노드는 http server를 :8000에서 실행하며, 패킷을 router 노드로 전달합니다. router 노드는 패킷이 등록된 경로와 동일한지 확인한 후 pong 노드로 패킷을 전달 합니다. 그후 pong 노드는 "pong"을 응답합니다.
 
 이제 uniflow를 시작해봅시다. 
 
