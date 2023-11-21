@@ -66,7 +66,7 @@ uniflow
   code: |
     "pong"
 ```
-http 노드는 http server를 :8000에서 실행하며, 패킷을 router 노드로 전달합니다. router 노드는 패킷이 등록된 경로와 동일한지 확인한 후 pong 노드로 패킷을 전달 합니다. 그후 pong 노드는 "pong"을 응답합니다.
+http 노드는 http server를 :8000에서 실행하며, 패킷을 router 노드로 전달합니다. router 노드는 패킷이 등록된 경로와 동일한지 확인한 후 pong 노드로 패킷을 전달 합니다. 그 후 pong 노드는 "pong"을 응답합니다.
 
 이제 uniflow를 시작해봅시다. 
 
