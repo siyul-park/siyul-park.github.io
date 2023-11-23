@@ -81,6 +81,8 @@ curl localhost:8000/ping
 pong#
 ```
 
+## 조금 더, 안으로
+
 좀 더 흥미로운 [boot 예제](https://github.com/siyul-park/uniflow/blob/main/examples/boot.yaml) 을 살펴 봅시다.
 
 ```yaml
