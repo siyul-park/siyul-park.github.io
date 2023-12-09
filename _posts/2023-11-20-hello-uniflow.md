@@ -163,7 +163,20 @@ pong#
         port: io
 ```
 
-위 코드는 `snippet` 노드의 설정을 담고 있습니다. 여기서는 [jsonata](https://jsonata.org)라는 경량 언어를 활용하여 JSON 데이터를 변환하고 질의하는 작업을 처리합니다.
+위 코드는 `snippet` 노드의 설정을 담고 있습니다. 여기서는 경량 언어인 [jsonata](https://jsonata.org)를 활용하여 JSON 데이터를 변환하고 질의하는 작업을 처리합니다.
+
+[jsonata](https://jsonata.org)는 uniflow에서 제공하는 가장 중요한 언어입니다. JSON 데이터를 변환하고 질의 하기 위해서 `switch` 노드 등에서도 기본 언어로 사용이 됩니다.
+
+```yaml
+- kind: switch
+  match:
+    - when: '$.permission = "admin"'
+      port: out[0]
+  links:
+    out[0]:
+      - name: admin
+        port: in
+```
 
 `snippet` 노드는 다양한 언어를 지원하며, 현재는 javascript와 typescript도 사용 가능합니다. 이 노드는 내장된 인터프리터를 활용하여 언어를 실행하며, 이를 통해 시스템의 효율성을 높이고 Inter-Process Communication (IPC)에 소요되는 시간을 최소화합니다.
 
