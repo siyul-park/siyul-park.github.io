@@ -72,7 +72,7 @@ uniflow
 이제 uniflow를 시작해봅시다. 
 
 ```bash
-./dist/uniflow start --file example/ping.yaml
+./dist/uniflow start --filename example/ping.yaml
 ```
 
 시작한 uniflow가 정상적으로 HTTP 엔드포인트를 제공하는지 확인합시다.
@@ -185,7 +185,7 @@ pong#
 `boot`를 실행하고 설치된 노드를 조회해보겠습니다.
 
 ```bash
-./dist/uniflow start --file example/boot.yaml --namespace system
+./dist/uniflow start --filename example/boot.yaml --namespace system
 ```
 
 ```bash
