@@ -20,7 +20,7 @@ title                    : "한걸음씩 천천히"
 title_separator          : "-"
 subtitle                 : # site tagline that appears below site title in masthead
 name                     : "Ara Park"
-description              : "Dynamic Developer in Backend and Emerging Technologies 🚀"
+description              : "Software Engineer Exploring Technology 🚀"
 url                      : "http://siyul-park.github.io"
 baseurl                  : # the subpath of your site, e.g. "/blog"
 repository               : "siyul-park/siyul-park.github.io"
