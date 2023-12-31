@@ -5,7 +5,7 @@ date:   2023-12-27 12:00:00 +0900
 categories: pattern
 ---
 
-좋은 코드 구조는 생산성과 유지 보수성을 향상시킵니다. Spring Boot를 사용하면서 `Controller`, `Service`, `Repository`, `Entity`가 각 도메인마다 하나씩 존재하는 정형화된 패턴을 쉽게 볼 수 있습니다. 하지만 도메인의 복잡도가 올라가다 보면 그 도메인이 가진 모든 연산을 수행하는 거대한 `Service`와 그 모든 연산에 필요한 데이터들의 집합이 된 `Entity`가 되는 경우가 많습니다.
+Spring Boot를 사용하면서 `Controller`, `Service`, `Repository`, `Entity`가 각 도메인마다 하나씩 존재하는 정형화된 패턴을 쉽게 볼 수 있습니다. 하지만 도메인의 복잡도가 올라가다 보면 그 도메인이 가진 모든 연산을 수행하는 거대한 `Service`와 그 모든 연산에 필요한 데이터들의 집합이 된 `Entity`가 되는 경우가 많습니다.
 
 ```kotlin
 @Controller
