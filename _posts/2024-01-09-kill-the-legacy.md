@@ -39,7 +39,7 @@ categories: management
 
 새로운 서비스를 만들어 기존 서비스를 대체하기는 쉽지 않습니다. 다양한 비즈니스 요구사항과 경쟁을 하며 새 서비스를 만들기 위해 충분한 지원을 얻어내야 합니다. 그리고 최소한 고객과 동료들에게 기존 서비스가 제공하던 것만큼의 가치를 제공할 수 있어야 하고, 기존 서비스 사용자들이 불편함을 느끼지 않게 자연스럽게, 이전해야 합니다.
 
-완전히 새로운 서비스를 만들어 대체할지, 아니면 점진적으로 기존 서비스를 향상하는 것이 더 나을지 고민해 보세요. 기존 서비스를 회피하기 위한 수단으로 재설계를 진행해서는 안됩니다. 쓰레기통을 뒤지는 것 같더라도 기존 서비스를 조금씩 바꾸는 것이 더 좋을 수 있습니다. 물론 기존 서비스를 점진적으로 개선하기는 어렵고 힘든 일이지만, 더 위험부담이 적습니다.
+완전히 새로운 서비스를 만들어 대체할지, 아니면 점진적으로 기존 서비스를 향상하는 것이 더 나을지 고민해 보세요. 기존 서비스를 회피하기 위한 수단으로 재설계를 진행해서는 안 됩니다. 쓰레기통을 뒤지는 것 같더라도 기존 서비스를 조금씩 바꾸는 것이 더 좋을 수 있습니다. 물론 기존 서비스를 점진적으로 개선하기는 어렵고 힘든 일이지만, 더 위험부담이 적습니다.
 
 그런데 기존 서비스가 너무 오래되고 더 이상 관리되지 않는 기술로 작성되어 있을 때는 어떨까요? 경우에 따라 리팩토링과 추후 유지보수 비용이 재설계에 필요한 비용보다 많을 수 있습니다. 이런 경우에는 재설계를 진지하게 고려해야 합니다.
 
@@ -86,7 +86,13 @@ categories: management
 이러한 과정에서 서비스에 오는 트래픽을 제어하고 사용자 요청을 수집하기 위해 API Gateway를 활용합니다. [AWS API Gateway](https://aws.amazon.com/ko/api-gateway), [AWS Lambda](https://aws.amazon.com/ko/lambda/), [NGINX Plus](https://nginxstore.com/store/products/nginx-plus/), [Uniflow](https://github.com/siyul-park/uniflow)와 같은 서비스를 사용하거나, 직접 구축하여 활용할 수 있습니다.
 
 ## 참고 자료
+
 - [신뢰 자본, 기억보단 기록을](https://jojoldu.tistory.com/675)
 - [프로덕트 팀이 신뢰를 '자산'처럼 관리해야 하는 이유, 요즘IT](https://yozm.wishket.com/magazine/detail/1999/)
 - [AWS API Gateway + Lambda 로 A/B 테스트하기, Haandol](https://haandol.github.io/2020/06/25/aws-serverless-abtest.html)
 - [A/B 테스트 배포, NGINX Plus API Gateway로 시작하기, nginxstore](https://nginxstore.com/blog/api-gateway/a-b-%ED%85%8C%EC%8A%A4%ED%8A%B8-%EB%B0%B0%ED%8F%AC-nginx-plus-api-gateway%EB%A1%9C-%EC%8B%9C%EC%9E%91%ED%95%98%EA%B8%B0/)
+
+## 도움
+
+- [ewlkkf](https://github.com/ewlkkf)
+- [Seungwoo-Yu](https://github.com/Seungwoo-Yu)
