@@ -26,8 +26,8 @@ BenchmarkCollection_FindOne/without_index-4      849    1325947 ns/op    27821 B
 
 ```go
 type Section struct {
-	data maps.Map
-	mu   *sync.RWMutex
+	data *treemap.Map
+	mu   sync.RWMutex
 }
 
 // ...
@@ -72,8 +72,8 @@ func (s *Section) Range(f func(doc *primitive.Map) bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	for _, doc := range s.data.Values() {
-		if !f(doc.(*primitive.Map)) {
+	for iterator := s.data.Iterator(); iterator.Next(); {
+		if !f(iterator.Value().(*primitive.Map)) {
 			break
 		}
 	}
@@ -104,8 +104,8 @@ c.section.Range(func(doc *primitive.Map) bool {
 
 ```go
 type Section struct {
-	data        maps.Map
-	indexes     []maps.Map // []map[index key]...[]primary key
+	data        *treemap.Map
+	indexes     []*treemap.Map // []map[index key]...[]primary key
 	constraints []Constraint
 	mu          sync.RWMutex
 }
@@ -141,7 +141,7 @@ func (s *Section) index(doc *primitive.Map) error {
 			value, _ := primitive.Pick[primitive.Value](doc, k)
 
 			c, _ := cur.Get(value)
-			child, ok := c.(maps.Map)
+			child, ok := c.(*treemap.Map)
 			if !ok {
 				child = treemap.NewWith(comparator)
 				cur.Put(value, child)
@@ -200,22 +200,22 @@ func (s *Section) unindex(doc *primitive.Map) {
 
 	for i, constraint := range s.constraints {
 		cur := s.indexes[i]
-		
-		paths := []maps.Map{cur}
+
+		paths := []*treemap.Map{cur}
 		keys := []primitive.Value{nil}
 
 		for i, k := range constraint.Keys {
 			value, _ := primitive.Pick[primitive.Value](doc, k)
 
 			c, _ := cur.Get(value)
-			child, ok := c.(maps.Map)
+			child, ok := c.(*treemap.Map)
 			if !ok {
 				paths = nil
 				keys = nil
 
 				break
 			}
-			
+
 			paths = append(paths, child)
 			keys = append(keys, value)
 
@@ -238,4 +238,11 @@ func (s *Section) unindex(doc *primitive.Map) {
 		}
 	}
 }
+```
+
+```go
+BenchmarkCollection_FindOne/With_Index-4                  426932              3373 ns/op             416 B/op         15 allocs/op
+BenchmarkCollection_FindOne/Without_Index-4                 1986            665737 ns/op           65168 B/op       5014 allocs/op
+BenchmarkCollection_FindMany/With_Index-4                 377970              3690 ns/op             408 B/op         14 allocs/op
+BenchmarkCollection_FindMany/Without_Index-4                2036            685697 ns/op           65068 B/op       5013 allocs/op
 ```
