@@ -22,7 +22,7 @@ BenchmarkCollection_FindOne/without_index-4      849    1325947 ns/op    27821 B
 
 인덱스 사용 시 성능이 저하되는 주된 이유는 인덱스 스캔 이후에도 전체 도큐먼트를 순회하는 풀 스캔 과정이었습니다. 이 문제를 해결하기 위해 정상적으로 동작하지 않는 인덱스 부분을 제거하여 코드를 보다 이해하기 쉽고 수정하기 용이하게 다듬었습니다.
 
-또한, `collection`과 `indexView`에 분산된 데이터 관리 연산을 `section`이라 명명된 스토리지 계층으로 분리하여 응집성을 높이고, `collection`과 `indexView`의 인터페이스와 독립적으로 구성되도록 추출합니다.
+그리고, `collection`과 `indexView`에 분산된 데이터 관리 연산을 `section`이라 명명된 스토리지 계층으로 분리하여 응집성을 높이고, `collection`과 `indexView`의 인터페이스와 독립적으로 구성되도록 추출합니다.
 
 ```go
 type Section struct {
@@ -84,14 +84,51 @@ func (s *Section) Range(f func(doc *primitive.Map) bool) {
 ```
 
 ```go
-// collection.FindMany
+func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts ...*database.FindOptions) ([]*primitive.Map, error) {
+	opt := database.MergeFindOptions(opts)
 
-c.section.Range(func(doc *primitive.Map) bool {
-	if match == nil || match(doc) {
-		docs = append(docs, doc)
+	limit := -1
+	skip := 0
+	var sorts []database.Sort
+	if opt != nil {
+		if opt.Limit != nil {
+			limit = lo.FromPtr(opt.Limit)
+		}
+		if opt.Skip != nil {
+			skip = lo.FromPtr(opt.Skip)
+		}
+		if opt.Sorts != nil {
+			sorts = opt.Sorts
+		}
 	}
-	return len(sorts) > 0 || limit < 0 || len(docs) < limit+skip
-})
+
+	match := parseFilter(filter)
+
+	var docs []*primitive.Map
+	c.section.Range(func(doc *primitive.Map) bool {
+		if match == nil || match(doc) {
+			docs = append(docs, doc)
+		}
+		return len(sorts) > 0 || limit < 0 || len(docs) < limit+skip
+	})
+
+	if skip >= len(docs) {
+		return nil, nil
+	}
+	if len(sorts) > 0 {
+		compare := parseSorts(sorts)
+		sort.Slice(docs, func(i, j int) bool {
+			return compare(docs[i], docs[j])
+		})
+	}
+	docs = docs[skip:]
+	if limit >= 0 && len(docs) > limit {
+		docs = docs[:limit]
+	}
+
+	return docs, nil
+}
+
 ```
 
 이렇게 단순화된 데이터베이스 모델은 `map`에 데이터를 저장하며, 모든 데이터를 순회하여 제공된 필터와 일치하는 도큐먼트를 찾습니다.
@@ -242,6 +279,8 @@ func (s *Section) unindex(doc *primitive.Map) {
 
 ### 인덱스 스캔
 
+이제 인덱스 스캔을 만들때가 되었습니다. `section`에 특정 인덱스를 이용해서 최소값 최대값의 범위안에 있는 도큐먼트를 스캔하는 메서드를 작성합시다.
+
 ```go
 func (s *Section) Scan(name string, min, max primitive.Value) (*Sector, bool) {
 	s.mu.RLock()
@@ -265,6 +304,8 @@ func (s *Section) Scan(name string, min, max primitive.Value) (*Sector, bool) {
 }
 ```
 
+`sector`은 인덱스의 특정 범위를 나타냅니다. `sector`를 스캔하면 현재의 인덱스 노드의 키를 순회하며 조건에 맞는 값을 추출하고, 그 값을 새로운 하위 인덱스에 병합합니다.
+
 ```go
 type Sector struct {
 	keys  []string
@@ -279,20 +320,6 @@ func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
 
 	if len(s.keys) == 0 || s.keys[0] != key {
 		return nil, false
-	}
-
-	if min != nil && max != nil && primitive.Compare(min, max) == 0 {
-		value, ok := s.index.Get(min)
-		if !ok {
-			value = treemap.NewWith(comparator)
-		}
-
-		return &Sector{
-			data:  s.data,
-			keys:  s.keys[1:],
-			index: value.(*treemap.Map),
-			mu:    s.mu,
-		}, true
 	}
 
 	index := treemap.NewWith(comparator)
@@ -324,6 +351,8 @@ func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
 }
 ```
 
+`sector`가 가르키는 도큐먼드를 순회하기 위해선, 인덱스의 리프 노드를 가르킬 때 까지 인덱스를 타고 내려가며 스캔하고, 리프 노드에 있는 기본 키를 기반으로 도큐먼트를 검색 합니다.
+
 ```go
 func (s *Sector) Range(f func(doc *primitive.Map) bool) {
 	s.mu.RLock()
@@ -346,16 +375,39 @@ func (s *Sector) Range(f func(doc *primitive.Map) bool) {
 }
 ```
 
-### 실행 계획
+`sector`가 현재의 인덱스 노드 전체를 순회하는 대신 좀더 빠르게 결과를 찾을 수 도 있습니다. 최소값 최대값이 동일 하다면, 하위 노드 하나를 바로 선택할 수 있습니다.
 
 ```go
-type Filter struct {
-	OP       OP
-	Key      string
-	Value    primitive.Value
-	Children []*Filter
+func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
+	// ...
+
+	if len(s.keys) == 0 || s.keys[0] != key {
+		return nil, false
+	}
+
+	if min != nil && max != nil && primitive.Compare(min, max) == 0 {
+		value, ok := s.index.Get(min)
+		if !ok {
+			value = treemap.NewWith(comparator)
+		}
+
+		return &Sector{
+			data:  s.data,
+			keys:  s.keys[1:],
+			index: value.(*treemap.Map),
+			mu:    s.mu,
+		}, true
+	}
+
+	index := treemap.NewWith(comparator)
+
+	// ...
 }
 ```
+
+### 실행 계획
+
+그 다음으로 만들것은 인덱스를 어떻게 순회할 것인지를 명시하는 실행 계획입니다. 
 
 ```go
 type executionPlan struct {
@@ -364,7 +416,11 @@ type executionPlan struct {
 	max  primitive.Value
 	next *executionPlan
 }
+```
 
+인덱스의 키와 `filter` 가 주어졌을때 적절한 실행 계획을 만들어야 합니다. `filter`의 연산이 `EQ`, `GT`, `GTE`, `LT`, `LTE` 중에 하나이고 인덱스 키와 동일한 키를 사용한다면 그 키를 이용해서 인덱스의 탐색이 가능합니다. `filter`에 나타나지 않는 다른 인덱스 키들을 모든 영역을 순회해야 합니다. 그리고 `filter`의 연산이 `AND`인 경우는 모든 자식 `execution plan`를 만족하는 작은 범위를 가지는 `execution plan`를 생성합니다.
+
+```go
 func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 	if filter == nil {
 		return nil
@@ -376,15 +432,6 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 	case database.AND:
 		for _, child := range filter.Children {
 			plan = plan.and(newExecutionPlan(keys, child))
-		}
-	case database.OR:
-		for _, child := range filter.Children {
-			plan = plan.or(newExecutionPlan(keys, child))
-		}
-	case database.IN:
-		value := filter.Value.(*primitive.Slice)
-		for _, v := range value.Values() {
-			plan = plan.or(newExecutionPlan(keys, database.Where(filter.Key).EQ(v)))
 		}
 	case database.EQ, database.GT, database.GTE, database.LT, database.LTE:
 		var root *executionPlan
@@ -437,6 +484,8 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 }
 ```
 
+`and`은 두개의 `execution plan`을 하나로 합쳐 보다 작은 범위의 `execution plan`를 만들어 냅니다.
+
 ```go
 func (e *executionPlan) and(other *executionPlan) *executionPlan {
 	if e == nil {
@@ -475,6 +524,33 @@ func (e *executionPlan) and(other *executionPlan) *executionPlan {
 	return z
 }
 ```
+
+작은 범위로 `execution plan`를 합치는 대신 더 큰 범위로 `execution plan`를 병합할 수도 있습니다. `filter`의 연산이 `IN` 이거나 `OR` 이면 모든 자식 `execution plan`를 합쳐 큰 범위를 가지는 `execution plan`를 생성합니다.
+
+```go
+func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
+	// ...
+	switch filter.OP {
+	case database.AND:
+		// ...
+	case database.OR:
+		for _, child := range filter.Children {
+			plan = plan.or(newExecutionPlan(keys, child))
+		}
+	case database.IN:
+		value := filter.Value.(*primitive.Slice)
+		for _, v := range value.Values() {
+			plan = plan.or(newExecutionPlan(keys, database.Where(filter.Key).EQ(v)))
+		}
+	case database.EQ, database.GT, database.GTE, database.LT, database.LTE:
+		// ...
+	}
+
+	return plan
+}
+```
+
+`or`은 두개의 `execution plan`을 하나로 합쳐 보다 큰 범위의 `execution plan`를 만들어 냅니다.
 
 ```go
 func (e *executionPlan) or(other *executionPlan) *executionPlan {
@@ -521,24 +597,11 @@ func (e *executionPlan) or(other *executionPlan) *executionPlan {
 
 ### 도큐먼트 검색
 
+지금 까지 한 모든 것을 합쳐 `filter`가 주어졌을때 인덱스를 활용하여 도큐먼트를 검색할 수 있습니다.
+
 ```go
 func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts ...*database.FindOptions) ([]*primitive.Map, error) {
-	opt := database.MergeFindOptions(opts)
-
-	limit := -1
-	skip := 0
-	var sorts []database.Sort
-	if opt != nil {
-		if opt.Limit != nil {
-			limit = lo.FromPtr(opt.Limit)
-		}
-		if opt.Skip != nil {
-			skip = lo.FromPtr(opt.Skip)
-		}
-		if opt.Sorts != nil {
-			sorts = opt.Sorts
-		}
-	}
+	// ...
 
 	fullScan := true
 
@@ -550,8 +613,6 @@ func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts .
 			break
 		}
 	}
-
-	match := parseFilter(filter)
 
 	docMap := treemap.NewWith(comparator)
 	appendDocs := func(doc *primitive.Map) bool {
@@ -586,25 +647,12 @@ func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts .
 		docs = append(docs, doc.(*primitive.Map))
 	}
 
-	if skip >= len(docs) {
-		return nil, nil
-	}
-	if len(sorts) > 0 {
-		compare := parseSorts(sorts)
-		sort.Slice(docs, func(i, j int) bool {
-			return compare(docs[i], docs[j])
-		})
-	}
-	docs = docs[skip:]
-	if limit >= 0 && len(docs) > limit {
-		docs = docs[:limit]
-	}
-
-	return docs, nil
+	// ...
 }
 
 ```
 
+결과는 인덱스를 활용하였을때 인덱스를 활용하지 않는 것 보다 200 배 빠른 성능을 보여 줍니다. 또한 리팩토링하기 전이랑 비교해서 인덱스를 사용하지 않았을 경우도 2배 빠른 성능을 보여줍니다.
 
 ```go
 BenchmarkCollection_FindOne/With_Index-4                  426932              3373 ns/op             416 B/op         15 allocs/op
