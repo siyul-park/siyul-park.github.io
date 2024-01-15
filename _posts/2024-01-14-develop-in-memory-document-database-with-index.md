@@ -1,26 +1,26 @@
 ---
 layout: single
-title:  "인덱스를 지원하는 인메모리 도큐먼트 데이터베이스 개발기"
+title:  "인덱스를 지원하는 인메모리 도큐먼트 DB 만들기"
 date:   2024-01-14 12:00:00 +0900
-categories: develop
+categories: database
 ---
 
-[uniflow](https://github.com/siyul-park/uniflow)은 Stand-Alone 지원을 통해 사용 편의성을 높이고, 효과적인 테스트를 위해 인메모리 도큐먼트 데이터베이스인 `memdb`를 내장하고 있습니다.
+[uniflow](https://github.com/siyul-park/uniflow)은 Stand-Alone 지원과 효과적인 테스트를 위해 인메모리 도큐먼트 데이터베이스인 `memdb`를 제공합니다. 이는 개발 및 테스트 환경에서 `mongodb`를 대체하여 빠르고 간편한 환경 구성을 지원합니다.
 
-그러나 최근 외부 설계 변경으로 인해 `memdb`의 코드는 가독성이 떨어졌습니다. 그리고 인덱스 사용 시 성능 문제가 발생하고 읽기 성능이 `mongodb`보다 떨어졌습니다.
+그러나 최근 외부 설계 변경으로 가독성이 심각하게 저해되었으며, 인덱스 사용 시 성능 문제가 발생하고 읽기 성능이 `mongodb`보다 떨어진다는 문제가 있습니다.
 
 ```shell
 BenchmarkCollection_FindOne/with_index-4         202    6776052 ns/op   211865 B/op    6044 allocs/op
 BenchmarkCollection_FindOne/without_index-4      849    1325947 ns/op    27821 B/op     839 allocs/op
 ```
 
-이해하기 쉽고 간결한 코드로 가독성을 향상시키고, 성능을 개선하기 위한 리팩토링이 진행되었습니다.
+이해하기 쉽고 간결하게 코드를 다듬어 가독성을 향상시키고, 성능을 개선하기 위해 리팩토링을 진행하였습니다.
 
-### 간결하게 유지
+### 가장 간결하게
 
-성능 저하의 주 원인은 인덱스 스캔 후에 풀 스캔이 발생하여 전체 도큐먼트를 순회하는 과정이었습니다. 이를 해결하기 위해 인덱스 부분을 제거하여 코드를 더 이해하기 쉽게 수정했습니다.
+성능 저하의 주 원인은 인덱스 스캔 후에 테이블 풀 스캔이 발생하여 전체 도큐먼트를 순회하는 과정이었습니다. 이를 해결하기 위해 정상적으로 동작하지 않는 인덱스 부분을 제거하여 코드를 더 이해하기 쉽게 수정했습니다.
 
-그리고 데이터 관리 연산을 추가적인 스토리지 계층으로 분리하여 응집성을 높이고, 외부 인터페이스와 독립적으로 구성되도록 추출했습니다.
+그리고 데이터 관리 연산을 스토리지 계층으로 분리하여 응집성을 높이고, 외부 인터페이스와 독립적으로 구성되도록 추출했습니다.
 
 ```go
 type Section struct {
@@ -91,9 +91,31 @@ func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts .
 
 ### 인덱싱과 역 인덱싱
 
-인덱스는 트리를 사용하여 구현되었습니다. 각 브랜치 노드에는 인덱스의 키 값을 저장하고, 리프 노드에는 기본 키를 저장했습니다. 각 노드는 `red-black tree`로 구현되었습니다.
+모든 도큐먼트를 순회하는 것이 아닌 인덱스를 활용하여 효율적으로 도큐먼트를 찾을 수 있습니다.
 
-인덱싱은 인덱스를 따라 내려가며 인덱스 키에 맞는 노드를 생성하고, 리프 노드에 도달하면 해당 리프 노드에 기본 키를 삽입합니다. 유니크 인덱스인 경우 리프 노드에 두 개 이상의 기본 키가 들어 있으면 충돌이 발생합니다.
+인덱스를 트리로 구현했는데, 각 브랜치 노드에는 인덱스의 키 값을, 리프 노드에는 기본 키를 저장했습니다. 각 노드는 `red-black tree`를 사용했습니다. 인덱스 범위 스캔을 지원하려면 `b+ tree`가 더 적합하지만, 적절한 라이브러리를 찾지 못해 부득이하게 `red-black tree`를 사용하게 되었습니다.
+
+```go
+type Section struct {
+	data        *treemap.Map
+	indexes     []*treemap.Map // []map[index key]...[]primary key
+	constraints []Constraint
+	mu          sync.RWMutex
+}
+```
+
+그리고 인덱스의 제약 조건을 정의하여 복합 인덱스(Composite Index), 유니크 인덱스(Unique Index), 부분 인덱스(Partial Index)를 지원할 것입니다.
+
+```go
+type Constraint struct {
+	Name    string
+	Keys    []string
+	Unique  bool
+	Partial func(*primitive.Map) bool
+}
+```
+
+인덱싱은 인덱스를 따라 내려가며 인덱스 키에 맞는 노드를 생성하고, 리프 노드에 도달하면 기본 키를 삽입합니다. 유니크 인덱스인 경우 리프 노드에 두 개 이상의 기본 키가 들어 있으면 충돌이 발생합니다.
 
 ```go
 func (s *Section) index(doc *primitive.Map) error {
@@ -190,7 +212,9 @@ func (s *Section) unindex(doc *primitive.Map) {
 
 ### 인덱스 스캔
 
-구성된 인덱스를 탐색하며, 도큐먼트를 찾아 봅시다. 인덱스 키가 최소값과 최대값 범위 내에 위치하는 하위 인덱스 노드들을 병합하여 새로운 인덱스를 생성합니다.
+인덱스를 탐색하여 도큐먼트를 찾아보겠습니다. 인덱스 키가 최소값과 최대값 범위 내에 위치하는 하위 인덱스 노드들을 병합하여 새로운 인덱스를 생성합니다. 이를 통해 인덱스의 깊이를 줄여가며 후보군을 좁혀 나갈 것입니다.
+
+범위 내의 키를 찾기 위해 인덱스 전체를 탐색했습니다. 이웃 노드 간에 연결된 `b+ tree`와 같은 자료구조를 활용하면 범위 스캔을 더 효율적으로 수행할 수 있습니다.
 
 ```go
 func (s *Section) Scan(name string, min, max primitive.Value) (*Sector, bool) {
@@ -216,13 +240,6 @@ func (s *Section) Scan(name string, min, max primitive.Value) (*Sector, bool) {
 ```
 
 ```go
-type Sector struct {
-	keys  []string
-	data  *treemap.Map
-	index *treemap.Map
-	mu    *sync.RWMutex
-}
-
 func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -260,31 +277,7 @@ func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
 }
 ```
 
-인덱스의 리프 노드에 도달할 때까지 인덱스를 타고 내려가며 스캔하고, 리프 노드에 있는 기본 키를 기반으로 도큐먼트를 검색합니다.
-
-```go
-func (s *Sector) Range(f func(doc *primitive.Map) bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-
-	sector := s
-	for len(sector.keys) > 0 {
-		sector, _ = sector.Scan(sector.keys[0], nil, nil)
-	}
-
-	for iterator := sector.index.Iterator(); iterator.Next(); {
-		key := iterator.Key()
-		doc, ok := s.data.Get(key)
-		if ok {
-			if !f(doc.(*primitive.Map)) {
-				break
-			}
-		}
-	}
-}
-```
-
-최소값과 최대값이 동일한 경우, 하위 노드 하나를 바로 선택하여 더 효율적으로 결과를 찾을 수 있도록 개선할 수 있습니다. 
+최소값과 최대값이 동일한 경우, 인덱스 풀 스캔 대신 인덱스 유니크 스캔을 사용하여 더 효율적으로 결과를 찾을 수 있도록 개선할 수 있습니다. 
 
 ```go
 func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
@@ -308,9 +301,33 @@ func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
 }
 ```
 
+제한된 인덱스 범위 내의 모든 도큐먼트를 순회하기 위해 리프 노드까지 이동하여 모든 노드들을 병합한 후, 해당 리프 노드에 저장된 기본 키를 활용하여 도큐먼트를 검색합니다.
+
+```go
+func (s *Sector) Range(f func(doc *primitive.Map) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sector := s
+	for len(sector.keys) > 0 {
+		sector, _ = sector.Scan(sector.keys[0], nil, nil)
+	}
+
+	for iterator := sector.index.Iterator(); iterator.Next(); {
+		key := iterator.Key()
+		doc, ok := s.data.Get(key)
+		if ok {
+			if !f(doc.(*primitive.Map)) {
+				break
+			}
+		}
+	}
+}
+```
+
 ### 실행 계획
 
-인덱스를 어떻게 순회할지를 명시하는 실행 계획을 만들어 봅시다. 특정 키를 기준으로 최소값과 최대값을 포함하는 범위를 나타내고, 다음 실행 계획을 갖습니다.
+검색 조건을 바탕으로 인덱스를 어떻게 탐색할지를 결정해야 합니다. 실행 계획은 특정한 인덱스 키의 범위를 가지고 있고 다음에 실행할 계획을 갖습니다.
 
 ```go
 type executionPlan struct {
@@ -321,11 +338,9 @@ type executionPlan struct {
 }
 ```
 
-주어진 인덱스 키와 필터를 기반으로 효과적인 실행 계획을 생성합니다.
+인덱스 키와 검색 조건을 기반으로 적절한 실행 계획이 만들어지게 됩니다.
 
-`AND` 연산은 모든 자식의 탐색 범위의 겹치는 부분, 즉 교집합을 나타내도록 병합합니다.
-
-`EQ`, `GT`, `GTE`, `LT`, `LTE` 연산자는 인덱스 키와 필터의 키가 일치하면 해당 키를 이용하여 인덱스를 탐색할 수 있습니다. 일치하지 않는 다른 키들은 모든 영역을 순회합니다.
+`AND` 연산은 모든 자식을 탐색 범위의 겹치는 부분, 즉 교집합을 나타내도록 병합합니다. 그리고 `EQ`, `GT`, `GTE`, `LT`, `LTE` 연산자는 인덱스 키와 필터의 키가 일치하면 해당 키를 이용하여 인덱스를 탐색할 수 있습니다. 일치하지 않는 다른 키들은 모든 영역을 순회합니다.
 
 ```go
 func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
@@ -341,21 +356,13 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 			plan = plan.intersect(newExecutionPlan(keys, child))
 		}
 	case database.EQ, database.GT, database.GTE, database.LT, database.LTE:
-		var root *executionPlan
 		var pre *executionPlan
-
 		for _, key := range keys {
+			var cur *executionPlan
 			if key != filter.Key {
-				p := &executionPlan{
+				cur = &executionPlan{
 					key: key,
 				}
-
-				if pre != nil {
-					pre.next = p
-				} else {
-					root = p
-				}
-				pre = p
 			} else {
 				value := filter.Value
 
@@ -370,20 +377,26 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 					max = value
 				}
 
-				p := &executionPlan{
+				cur = &executionPlan{
 					key: key,
 					min: min,
 					max: max,
 				}
+			}
 
-				if pre != nil {
-					pre.next = p
-				} else {
-					root = p
-				}
-				plan = root
+			if pre == nil {
+				plan = cur
+			} else {
+				pre.next = cur
+			}
+			pre = cur
+
+			if cur.min != nil || cur.max != nil {
 				break
 			}
+		}
+		if pre != nil && pre.min == nil && pre.max == nil {
+			plan = nil
 		}
 	}
 
@@ -391,15 +404,11 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 }
 ```
 
-작은 범위로 합치는 대신 더 큰 범위로 병합할 수도 있습니다. 연산자가 `IN`이나 `OR`이면 모든 자식의 탐색 범위를 포함하게 병합합니다.
+작은 범위로 합치는 대신 더 큰 범위로 병합할 때도 있습니다. 연산자가 `IN`이나 `OR`이면 모든 자식의 탐색 범위를 포함하게 합집합으로 병합합니다.
 
 ```go
 func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
-	if filter == nil {
-		return nil
-	}
-
-	var plan *executionPlan
+	// ...
 
 	switch filter.OP {
 	case database.AND:
@@ -423,9 +432,9 @@ func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
 
 ### 도큐먼트 검색
 
-이제 인덱스를 활용하여 도큐먼트를 검색할 수 있습니다. 각 제약조건을 순회하여 실행 계획을 만들고, 그에 따라 인덱스를 스캔하여 조건에 맞는 도큐먼트를 수집합니다. 
+이제 검색 조건이 주어지면 인덱스를 활용할 수 있습니다. 각 제약조건을 순회하여 실행 계획을 만들고, 그에 따라 인덱스를 스캔하여 조건에 맞는 도큐먼트를 수집합니다. 
 
-대부분의 경우에는 인덱스 스캔을 사용하면 풀 스캔이 필요하지 않지만, 부분 인덱스를 활용하는 경우 모든 도큐먼트가 인덱싱되어 있지 않을 수 있어 추가적으로 풀 스캔을 수행해야 합니다.
+대부분의 경우에는 인덱스 스캔을 사용하면 테이블 풀 스캔이 필요하지 않지만, 부분 인덱스를 활용하는 경우 모든 도큐먼트가 인덱싱되어 있지 않을 수 있어 추가적으로 테이블 풀 스캔을 수행해야 합니다.
 
 ```go
 func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts ...*database.FindOptions) ([]*primitive.Map, error) {
@@ -442,12 +451,12 @@ func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts .
 		}
 	}
 
-	docMap := treemap.NewWith(comparator)
-	appendDocs := func(doc *primitive.Map) bool {
+	scan := treemap.NewWith(comparator)
+	appends := func(doc *primitive.Map) bool {
 		if match == nil || match(doc) {
-			docMap.Put(doc.GetOr(keyID, nil), doc)
+			scan.Put(doc.GetOr(keyID, nil), doc)
 		}
-		return len(sorts) > 0 || limit < 0 || docMap.Size() < limit+skip
+		return len(sorts) > 0 || limit < 0 || scan.Size() < limit+skip
 	}
 
 	if plan != nil {
@@ -460,26 +469,21 @@ func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts .
 		}
 
 		if ok {
-			sector.Range(appendDocs)
+			sector.Range(appends)
 		} else {
 			fullScan = true
 		}
 	}
 
 	if fullScan {
-		c.section.Range(appendDocs)
-	}
-
-	var docs []*primitive.Map
-	for _, doc := range docMap.Values() {
-		docs = append(docs, doc.(*primitive.Map))
+		c.section.Range(appends)
 	}
 
 	// ...
 }
 ```
 
-인덱스를 활용하면 인덱스를 사용하지 않은 경우보다 200배 빠른 성능을 보여줍니다.
+이렇게 만들어진 인덱스를 활용하면 인덱스를 사용하지 않은 것보다 200배 더 빠른 성능을 보여줍니다.
 
 ```go
 BenchmarkCollection_FindOne/With_Index-4                  426932              3373 ns/op             416 B/op         15 allocs/op
@@ -487,3 +491,13 @@ BenchmarkCollection_FindOne/Without_Index-4                 1986            6657
 BenchmarkCollection_FindMany/With_Index-4                 377970              3690 ns/op             408 B/op         14 allocs/op
 BenchmarkCollection_FindMany/Without_Index-4                2036            685697 ns/op           65068 B/op       5013 allocs/op
 ```
+
+지금까지 작성된 코드의 최신 버전은 [memdb](https://github.com/siyul-park/uniflow/tree/main/pkg/database/memdb)에서 확인하실 수 있습니다.
+
+### 그 이후에
+
+개발된 데이터베이스는 테스트와 개발 환경에서 사용하기에 충분히 우수하지만, 몇 가지 개선할 수 있는 점이 있습니다.
+
+현재 구현된 인덱스는 `red-black tree`를 사용하여 인덱스 풀 스캔과 인덱스 유니크 스캔만을 지원하고 있어 제약이 있습니다. 이를 극복하기 위해 `b+ tree`를 도입하여 다양한 스캔 방법을 지원하면 성능을 향상시킬 수 있습니다.
+
+또한, 최적의 실행 계획을 도출하기 위해 첫 번째로 생성된 실행 계획이 아닌 비용을 기반으로 한 실행 계획 비교를 통해 최적의 경로를 선택할 수 있도록 개선할 수 있습니다.
