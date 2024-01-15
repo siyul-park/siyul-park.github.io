@@ -240,6 +240,372 @@ func (s *Section) unindex(doc *primitive.Map) {
 }
 ```
 
+### 인덱스 스캔
+
+```go
+func (s *Section) Scan(name string, min, max primitive.Value) (*Sector, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	for i, constraint := range s.constraints {
+		if constraint.Name != name {
+			continue
+		}
+
+		sector := &Sector{
+			keys:  constraint.Keys,
+			data:  s.data,
+			index: s.indexes[i],
+			mu:    &s.mu,
+		}
+		return sector.Scan(constraint.Keys[0], min, max)
+	}
+
+	return nil, false
+}
+```
+
+```go
+type Sector struct {
+	keys  []string
+	data  *treemap.Map
+	index *treemap.Map
+	mu    *sync.RWMutex
+}
+
+func (s *Sector) Scan(key string, min, max primitive.Value) (*Sector, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	if len(s.keys) == 0 || s.keys[0] != key {
+		return nil, false
+	}
+
+	if min != nil && max != nil && primitive.Compare(min, max) == 0 {
+		value, ok := s.index.Get(min)
+		if !ok {
+			value = treemap.NewWith(comparator)
+		}
+
+		return &Sector{
+			data:  s.data,
+			keys:  s.keys[1:],
+			index: value.(*treemap.Map),
+			mu:    s.mu,
+		}, true
+	}
+
+	index := treemap.NewWith(comparator)
+
+	s.index.Each(func(key, value any) {
+		k := key.(primitive.Value)
+		v := value.(*treemap.Map)
+
+		if (min != nil && primitive.Compare(k, min) < 0) || (max != nil && primitive.Compare(k, max) > 0) {
+			return
+		}
+
+		v.Each(func(key, value any) {
+			if v, ok := value.(*treemap.Map); ok {
+				if old, ok := index.Get(key); ok {
+					value = deepMerge(old.(*treemap.Map), v)
+				}
+			}
+			index.Put(key, value)
+		})
+	})
+
+	return &Sector{
+		data:  s.data,
+		keys:  s.keys[1:],
+		index: index,
+		mu:    s.mu,
+	}, true
+}
+```
+
+```go
+func (s *Sector) Range(f func(doc *primitive.Map) bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	sector := s
+	for len(sector.keys) > 0 {
+		sector, _ = sector.Scan(sector.keys[0], nil, nil)
+	}
+
+	for iterator := sector.index.Iterator(); iterator.Next(); {
+		key := iterator.Key()
+		doc, ok := s.data.Get(key)
+		if ok {
+			if !f(doc.(*primitive.Map)) {
+				break
+			}
+		}
+	}
+}
+```
+
+### 실행 계획
+
+```go
+type Filter struct {
+	OP       OP
+	Key      string
+	Value    primitive.Value
+	Children []*Filter
+}
+```
+
+```go
+type executionPlan struct {
+	key  string
+	min  primitive.Value
+	max  primitive.Value
+	next *executionPlan
+}
+
+func newExecutionPlan(keys []string, filter *database.Filter) *executionPlan {
+	if filter == nil {
+		return nil
+	}
+
+	var plan *executionPlan
+
+	switch filter.OP {
+	case database.AND:
+		for _, child := range filter.Children {
+			plan = plan.and(newExecutionPlan(keys, child))
+		}
+	case database.OR:
+		for _, child := range filter.Children {
+			plan = plan.or(newExecutionPlan(keys, child))
+		}
+	case database.IN:
+		value := filter.Value.(*primitive.Slice)
+		for _, v := range value.Values() {
+			plan = plan.or(newExecutionPlan(keys, database.Where(filter.Key).EQ(v)))
+		}
+	case database.EQ, database.GT, database.GTE, database.LT, database.LTE:
+		var root *executionPlan
+		var pre *executionPlan
+
+		for _, key := range keys {
+			if key != filter.Key {
+				p := &executionPlan{
+					key: key,
+				}
+
+				if pre != nil {
+					pre.next = p
+				} else {
+					root = p
+				}
+				pre = p
+			} else {
+				value := filter.Value
+
+				var min primitive.Value
+				var max primitive.Value
+				if filter.OP == database.EQ {
+					min = value
+					max = value
+				} else if filter.OP == database.GT || filter.OP == database.GTE {
+					min = value
+				} else if filter.OP == database.LT || filter.OP == database.LTE {
+					max = value
+				}
+
+				p := &executionPlan{
+					key: key,
+					min: min,
+					max: max,
+				}
+
+				if pre != nil {
+					pre.next = p
+				} else {
+					root = p
+				}
+				plan = root
+				break
+			}
+		}
+	}
+
+	return plan
+}
+```
+
+```go
+func (e *executionPlan) and(other *executionPlan) *executionPlan {
+	if e == nil {
+		return other
+	}
+	if other == nil {
+		return e
+	}
+
+	if e.key != other.key {
+		return nil
+	}
+
+	z := &executionPlan{
+		key: e.key,
+	}
+
+	if e.min == nil {
+		z.min = other.min
+	} else if primitive.Compare(e.min, other.min) < 0 {
+		z.min = other.min
+	} else {
+		z.min = e.min
+	}
+
+	if e.max == nil {
+		z.max = nil
+	} else if primitive.Compare(e.max, other.max) > 0 {
+		z.max = other.max
+	} else {
+		z.max = e.max
+	}
+
+	z.next = e.next.and(other.next)
+
+	return z
+}
+```
+
+```go
+func (e *executionPlan) or(other *executionPlan) *executionPlan {
+	if e == nil || other == nil || e.key != other.key {
+		return nil
+	}
+
+	z := &executionPlan{
+		key: e.key,
+	}
+
+	if e.min == nil || z.min == nil {
+		z.min = nil
+	} else if primitive.Compare(e.min, other.min) > 0 {
+		z.min = other.min
+	} else {
+		z.min = e.min
+	}
+
+	if e.max == nil || z.max == nil {
+		z.max = nil
+	} else if primitive.Compare(e.max, other.max) < 0 {
+		z.max = other.max
+	} else {
+		z.max = e.max
+	}
+
+	z.next = e.next.or(other.next)
+
+	allNil := true
+	for cur := z; cur != nil; cur = cur.next {
+		if cur.min != nil || cur.max != nil {
+			allNil = false
+			break
+		}
+	}
+	if allNil {
+		return nil
+	}
+
+	return z
+}
+```
+
+### 도큐먼트 검색
+
+```go
+func (c *Collection) FindMany(_ context.Context, filter *database.Filter, opts ...*database.FindOptions) ([]*primitive.Map, error) {
+	opt := database.MergeFindOptions(opts)
+
+	limit := -1
+	skip := 0
+	var sorts []database.Sort
+	if opt != nil {
+		if opt.Limit != nil {
+			limit = lo.FromPtr(opt.Limit)
+		}
+		if opt.Skip != nil {
+			skip = lo.FromPtr(opt.Skip)
+		}
+		if opt.Sorts != nil {
+			sorts = opt.Sorts
+		}
+	}
+
+	fullScan := true
+
+	var plan *executionPlan
+	for _, constraint := range c.section.Constraints() {
+		if plan = newExecutionPlan(constraint.Keys, filter); plan != nil {
+			plan.key = constraint.Name
+			fullScan = constraint.Partial != nil
+			break
+		}
+	}
+
+	match := parseFilter(filter)
+
+	docMap := treemap.NewWith(comparator)
+	appendDocs := func(doc *primitive.Map) bool {
+		if match == nil || match(doc) {
+			docMap.Put(doc.GetOr(keyID, nil), doc)
+		}
+		return len(sorts) > 0 || limit < 0 || docMap.Size() < limit+skip
+	}
+
+	if plan != nil {
+		sector, ok := c.section.Scan(plan.key, plan.min, plan.max)
+		plan = plan.next
+
+		for ok && plan != nil {
+			sector, ok = sector.Scan(plan.key, plan.min, plan.max)
+			plan = plan.next
+		}
+
+		if ok {
+			sector.Range(appendDocs)
+		} else {
+			fullScan = true
+		}
+	}
+
+	if fullScan {
+		c.section.Range(appendDocs)
+	}
+
+	var docs []*primitive.Map
+	for _, doc := range docMap.Values() {
+		docs = append(docs, doc.(*primitive.Map))
+	}
+
+	if skip >= len(docs) {
+		return nil, nil
+	}
+	if len(sorts) > 0 {
+		compare := parseSorts(sorts)
+		sort.Slice(docs, func(i, j int) bool {
+			return compare(docs[i], docs[j])
+		})
+	}
+	docs = docs[skip:]
+	if limit >= 0 && len(docs) > limit {
+		docs = docs[:limit]
+	}
+
+	return docs, nil
+}
+
+```
+
+
 ```go
 BenchmarkCollection_FindOne/With_Index-4                  426932              3373 ns/op             416 B/op         15 allocs/op
 BenchmarkCollection_FindOne/Without_Index-4                 1986            665737 ns/op           65168 B/op       5014 allocs/op
