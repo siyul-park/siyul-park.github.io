@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "안녕, uniflow"
-date:   2023-11-20 18:44:43 +0900
+title: "안녕, uniflow"
+date: 2023-11-20 18:44:43 +0900
 categories: low-code
 ---
 

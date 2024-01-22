@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "레거시 죽이기"
-date:   2024-01-09 12:00:00 +0900
+title: "레거시 죽이기"
+date: 2024-01-09 12:00:00 +0900
 categories: management
 ---
 

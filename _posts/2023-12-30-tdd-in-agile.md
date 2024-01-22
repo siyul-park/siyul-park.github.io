@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "애자일 속 TDD"
-date:   2023-12-30 12:00:00 +0900
+title: "애자일 속 TDD"
+date: 2023-12-30 12:00:00 +0900
 categories: agile
 ---
 

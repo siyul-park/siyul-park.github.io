@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "인덱스를 지원하는 인메모리 도큐먼트 DB 만들기"
-date:   2024-01-14 12:00:00 +0900
+title: "인덱스를 지원하는 인메모리 도큐먼트 DB 만들기"
+date: 2024-01-14 12:00:00 +0900
 categories: database
 ---
 

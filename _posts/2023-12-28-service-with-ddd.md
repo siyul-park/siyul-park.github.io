@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "DDD와 함께하는 서비스 가이드"
-date:   2023-12-27 12:00:00 +0900
+title: "DDD와 함께하는 서비스 가이드"
+date: 2023-12-27 12:00:00 +0900
 categories: pattern
 ---
 

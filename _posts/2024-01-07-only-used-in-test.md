@@ -1,7 +1,7 @@
 ---
 layout: single
-title:  "이건 테스트에서만 사용이 된다고요"
-date:   2024-01-07 12:00:00 +0900
+title: "이건 테스트에서만 사용이 된다고요"
+date: 2024-01-07 12:00:00 +0900
 categories: pattern
 ---
 
