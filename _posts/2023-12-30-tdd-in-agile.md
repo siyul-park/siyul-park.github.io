@@ -2,7 +2,7 @@
 title: "애자일 속 TDD"
 date: 2023-12-30 12:00:00 +0900
 categories: ["agile", "tdd"]
-tags: ["agile", "tdd", "testing"]
+tags: ["agile", "tdd"]
 ---
 
 > 우리는 소프트웨어를 개발하고, 또 다른 사람의 개발을 도와주면서 소프트웨어 개발의 더 나은 방법들을 찾아가고 있다.  
