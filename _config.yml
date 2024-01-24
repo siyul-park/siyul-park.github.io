@@ -246,7 +246,6 @@ defaults:
       layout: single
       author_profile: true
       read_time: true
-      toc_sticky: true
       comments: true
       share: true
       related: true
