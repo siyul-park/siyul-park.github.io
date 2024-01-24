@@ -3,6 +3,7 @@ title: "인덱스를 지원하는 인메모리 도큐먼트 DB 만들기"
 date: 2024-01-14 12:00:00 +0900
 categories: "database"
 tags: ["database", "in-memory", "mongodb", "golang"]
+toc: true
 ---
 
 [uniflow](https://github.com/siyul-park/uniflow)은 Stand-Alone 지원과 효과적인 테스트를 위해 인메모리 도큐먼트 데이터베이스인 `memdb`를 제공합니다. 이는 개발 및 테스트 환경에서 `mongodb`를 대체하여 빠르고 간편한 환경 구성을 위해 설계되었습니다.
