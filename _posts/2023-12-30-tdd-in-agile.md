@@ -1,7 +1,7 @@
 ---
 title: "애자일 속 TDD"
 date: 2023-12-30 12:00:00 +0900
-categories: ["agile", "tdd"]
+categories: "agile"
 tags: ["agile", "tdd"]
 ---
 
