@@ -1,8 +1,8 @@
 ---
-layout: single
 title: "안녕, uniflow"
 date: 2023-11-20 18:44:43 +0900
-categories: low-code
+categories: "low-code"
+tags: ["low-code", "uniflow"]
 ---
 
 [카카오 클라우드 AI 서비스](https://kakaocloud.com)의 미들웨어 개발은 현존하는 지식을 적극 활용하여 새로운 AI 서비스를 선보이기 위한 첫 발걸음이었습니다. 백엔드 AI 모델 팀으로부터 도착한 API를 기반으로 [Spring Cloud Gateway](https://spring.io/projects/spring-cloud-gateway)를 활용하여 열정적으로 미들웨어에 추가 요구사항을 구현했습니다. 각 AI 서비스는 설정 파일의 프로퍼티를 통해 미들웨어의 동적인 선택을 가능케 하며, [Spring Cloud Config Server](https://spring.io/projects/spring-cloud-config)가 동적 설정을 가져오는 역할을 했습니다.
