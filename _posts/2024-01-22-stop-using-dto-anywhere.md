@@ -2,7 +2,7 @@
 title: "모든 곳에서 DTO를 쓰지는 마세요"
 date: 2024-01-22 00:00:00 +0900
 categories: "pattern"
-tags: ["pattern", "ddd", "spring"]
+tags: ["pattern", "ddd", "spring", "java"]
 ---
 
 > 메서드 호출 수를 줄이기 위해 프로세스 간에 데이터를 전송하는 객체  
