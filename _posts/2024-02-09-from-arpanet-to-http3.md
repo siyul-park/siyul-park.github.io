@@ -15,7 +15,7 @@ tags: ["network", "websocket", "http"]
 
 DARPA(Defense Advanced Research Projects Agency)의 지원하에 1968년까지 ARPANET의 기본 구조와 사양이 확정되었고, 사설 연구 기관인 BBN(Bolt, Beranek, and Newman)이 패킷 교환기인 IMP(Interface Message Processors)를 개발했습니다. 
 
-1969년에는 4개의 호스트 컴퓨터가 연결되면서 ARPANET이 시작되었습니다. 먼저 UCLA(University of California, Los Angeles)의 네트워크측정센터(Network Measurement Center)가 최초의 ARPANET 노드로 선정되었고, 한 달 후에는 STI(Stanford Research Institute)가 두 번째 노드로 연결되었습니다. 이렇게 연결된 두 번째 노드를 통해 UCLA와 SRI 간의 호스트 간 메시지 전송이 이루어졌습니다. 이어서 UC 산타바바라와 유타대학교 등이 연결되면서 1969년 최초의 인터넷망인 ARPANET이 4개의 호스트 컴퓨터를 연결하는 네트워크로 구축되었습니다. 이후 ARPANET에 연결되는 컴퓨터가 늘어나 1971년 말까지 23개 호스트 컴퓨터가 연결되었습니다.
+1969년에는 4개의 호스트 컴퓨터가 연결되면서 ARPANET이 시작되었습니다. 먼저 UCLA(University of California, Los Angeles)의 네트워크측정센터(Network Measurement Center)가 최초의 ARPANET 노드로 선정되었고, 한 달 후에는 STI(Stanford Research Institute)가 두 번째 노드로 연결되었습니다. 이렇게 연결된 두 노드를 통해 UCLA와 SRI 간의 호스트 간 메시지 전송이 이루어졌습니다. 이어서 UC 산타바바라와 유타대학교 등이 연결되면서 1969년 최초의 인터넷망인 ARPANET이 4개의 호스트 컴퓨터를 연결하는 네트워크로 구축되었습니다. 이후 ARPANET에 연결되는 컴퓨터가 늘어나 1971년 말까지 23개 호스트 컴퓨터가 연결되었습니다.
 
 ### CSNET: ARPANET의 확장
 
