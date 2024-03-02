@@ -5,7 +5,46 @@ categories: "low-code"
 tags: ["low-code", "golang", "ddd"]
 ---
 
-[uniflow](https://github.com/siyul-park/uniflow)는 연산의 단위인 노드들을 포트를 통해 서로 연결하여 패킷을 전달하여 백엔드 워크플로우를 만드는 로우 코드 엔진입니다. 보통은 명시적으로 노드 간 연결을 정의하여 패킷의 처리 결과를 전달하지만, 사용자 편의성과 에러의 전파를 위해 암시적으로 패킷을 생산한 노드들에게 반환할 수도 있습니다.
+[uniflow](https://github.com/siyul-park/uniflow)는 로우 코드 엔진으로 [흐름 기반 프로그래밍 (FBP, Flow-Based Programming)](https://en.m.wikipedia.org/wiki/Flow-based_programming)을 기반으로 합니다. 서비스는 여러 노드로 이루어진 네트워크로 정의되며, 각 노드는 포트를 통해 연결됩니다. 이러한 연결은 미리 정의되어 있으며, 데이터 패킷은 이 연결을 통해 교환됩니다.
+
+패킷이 전달되기 위해서는 명시적으로 포트들이 연결되어야 합니다. 하지만 에러 처리와 같이 정상 흐름과 분리되는 흐름이 있을 때 연결은 더욱 복잡해집니다. 에러 처리를 위해 정상 처리를 위한 연결과 반대 방향으로 노드들을 연결해야 했고, 이로 인해 연결에 상호 참조가 발생하여 명세를 수정하기 어려워졌습니다.
+
+```yaml
+- kind: http
+  name: server
+  address: :8000
+  links:
+    out:
+      - name: route
+        port: in
+
+- kind: route
+  name: route
+  routes:
+    - method: GET
+      path: /ping
+      port: out[0]
+  links:
+    out[0]:
+      - name: pong
+        port: in
+    error:
+      - name: server
+        port: in
+
+- kind: snippet
+  name: pong
+  lang: text
+  code: pong
+  links:
+    out:
+      - name: server
+        port: in  
+```
+
+의존 관계를 줄여 명세를 간결하게 관리하기 위해 패킷이 암시적으로 전달되어야 했습니다. 발생한 에러는 처리 흐름을 거슬러 올라가며 전파되어야 했고, 패킷의 최종 처리 결과도 마찬가지로 흐름을 거슬러 올라가며 전달되어야 했습니다. 
+
+그래서 `error` 포트에 다른 포트가 연결되지 않은 경우, 에러를 요청자에게 전파하고, 결과가 반환되는 지점을 나타내는 `io` 포트를 도입했습니다.
 
 ```yaml
 - kind: http
@@ -33,43 +72,11 @@ tags: ["low-code", "golang", "ddd"]
   code: pong
 ```
 
-요청이 발생하면 `server`에서 `route`로 패킷이 전달되고, 이후에 `route`에서 `pong`으로 패킷이 전달됩니다. `pong`에서 생성된 데이터는 명시적으로 `server`와 연결되어 있지 않더라도 호출 스택을 거슬러 올라가 `server`까지 전달됩니다.
-
-명시적으로 선언한다면 다음과 같이 작성할 수 있습니다:
-
-```yaml
-- kind: http
-  name: server
-  address: :8000
-  links:
-    out:
-      - name: route
-        port: in
-
-- kind: route
-  name: route
-  routes:
-    - method: GET
-      path: /ping
-      port: out[0]
-  links:
-    out[0]:
-      - name: pong
-        port: in
-
-- kind: snippet
-  name: pong
-  lang: text
-  code: pong
-  links:
-    out:
-      - name: server
-        port: in  
-```
-
 ## 그래프 구조 스택을 활용한 패킷 추적
 
-한 노드가 여러 개의 노드와 연결되어 있고, 노드가 패킷을 비동기적으로 처리할 수 있어 패킷을 추적하기 위해 일반적인 스택 대신 [그래프 구조 스택](https://en.m.wikipedia.org/wiki/Graph-structured_stack)의 변형을 사용합니다. 이 변형된 스택은 패킷의 계보를 추적하는 그래프 구조와 각 패킷이 어떤 노드와 어떤 포트를 통해 이동했는지를 개별적으로 추적하는 스택 구조를 가지고 있습니다.
+이 기능을 구현하기 위해서는 패킷의 계보를 추적하고 패킷이 어떤 포트들을 통과했는지를 관리해야 했습니다. 한 노드가 여러 개의 노드와 연결되어 있고, 노드가 패킷을 비동기적으로 처리할 수 있어서 패킷을 추적하기 위해 일반적인 스택 대신 [그래프 구조 스택](https://en.m.wikipedia.org/wiki/Graph-structured_stack)의 변형을 사용했습니다. 
+
+이 변형된 스택은 패킷의 계보를 추적하는 그래프 구조와 각 패킷이 어떤 노드와 어떤 포트를 통해 이동했는지를 개별적으로 추적하는 스택 구조를 가지고 있습니다.
 
 **그래프:**
 ```
@@ -104,61 +111,35 @@ tags: ["low-code", "golang", "ddd"]
 
 ## 초기 설계의 한계
 
-초기 설계에서는 입/출력 포트가 명확하게 구분되지 않았으며, 포트는 단순히 양방향으로 패킷을 전달받을 수 있는 통로 역할을 수행했습니다. 패킷을 처리하고 결과를 전송하고 반환받는 과정은 포트의 역할이 아닌 노드의 역할이었습니다. 이로 인해 스택을 활용하여 패킷과 포트의 계보를 노드에서 직접 처리해야 했습니다.
+동일한 패킷이 여러 노드에서 동시에 처리될 수 있다고 생각했지만 패킷을 공유하면서 스택도 함께 공유되어, 스택에 예상치 못한 순서로 여러 노드에 대한 포트 정보가 기록되었습니다. 이로 인해 반환될 포트를 식별하기 어려워졌습니다. 이 문제를 해결하기 위해 패킷이 여러 자식으로 분화되어 서로 다른 노드로 전달되어야 했습니다.
+
+또한 초기 설계에서는 입/출력 포트가 명확히 구분되지 않았고, 포트는 단순히 양방향으로 패킷을 전달받을 수 있는 통로 역할을 수행했습니다. 패킷의 처리와 결과 반환은 포트의 역할이 아닌 노드의 역할로 설정되어 역할이었습니다. 패킷과 포트의 계보를 스택과 그래프를 활용하여 노드에서 직접 처리해야 했습니다.
 
 ```go
-// Node represents an operational unit that processes packets.
-type Node interface {
-	Port(name string) *port.Port 
-	Close() error                
-}
-```
-
-```go
-errStream := n.errPort.Open(proc)
-
-if inStream != outStream {
-    outStream.AddSendHook(port.SendHookFunc(func(pck *packet.Packet) {
-        proc.Stack().Push(pck.ID(), outStream.ID())
-    }))
-}
-errStream.AddSendHook(port.SendHookFunc(func(pck *packet.Packet) {
-    proc.Stack().Push(pck.ID(), errStream.ID())
-}))
+// In 포트에서 Out 포트로 순방향 전파
+outStream := n.outPort.Open(proc)
 
 for {
-    inPck, ok := <-inStream.Receive()
-    if !ok {
-        return
-    }
+  inPck, ok := <-inStream.Receive()
+  if !ok {
+    return
+  }
 
-    forward := func(outStream *port.Stream, outPck *packet.Packet, backward bool) {
-        proc.Graph().Add(inPck.ID(), outPck.ID())
-        if outStream.Links() > 0 {
-            if outStream != inStream {
-                proc.Stack().Push(outPck.ID(), inStream.ID())
-            }
-            outStream.Send(outPck)
-        } else if backward {
-            inStream.Send(outPck)
-        } else {
-            proc.Stack().Clear(outPck.ID())
-        }
-    }
+  // 패킷 처리...
 
-    if outPck, errPck := n.action(proc, inPck); errPck != nil {
-        forward(errStream, errPck, true)
-    } else if outPck != nil {
-        forward(outStream, outPck, false)
-    } else {
-        proc.Stack().Clear(inPck.ID())
-    }
+  proc.Graph().Add(inPck.ID(), outPck.ID())
+  if outStream.Links() > 0 {
+    proc.Stack().Push(outPck.ID(), inStream.ID())
+    outStream.Send(outPck)
+  } else {
+    proc.Stack().Clear(inPck.ID())
+  }
 }
 ```
 
-암시적 응답이나 에러 처리와 같은 부가적인 도메인 개념이 명확해짐에 따라 문제가 발생했습니다. 패킷의 전송과 응답에 대한 개념이 정제되지 못하고 노드 내에서 떠돌게 되었고 노드 내에서 패킷 처리 과정을 설명하기 위해서는 많은 상세 내용을 설명해야 했습니다. 점차적으로 구현이 복잡해지면서 커뮤니케이션 비용이 증가하고, 언어의 한계가 더욱 뚜렷해졌습니다.
+연산이 복잡해짐에 따라 문제가 발생했습니다. 패킷의 전송과 응답에 대한 개념이 명확하지 않아 노드 내에서 혼란이 생기고, 패킷 처리 과정을 설명하기 위해 보일러플레이트가 많이 필요했습니다. 이로 인해 개념적 중복이 발생했습니다. 또한, 연산의 과정만이 언어에 나타나고 명확히 정제된 언어가 없어서 커뮤니케이션 비용이 증가했습니다.
 
-과정을 더 쉽고 명확하게 설명해야 했고, 언어를 보다 명확하게 표현하고 구현을 이해하기 쉽게 만들기 위해 새로운 심층적인 모델을 탐구했습니다. 점차적으로 전송과 응답이라는 개념이 언어상에서 명확히 표현되기 시작했습니다.
+과정을 보다 쉽고 명확하게 언어애 표현하고 구현을 이해하기 쉽게 만들기 위해 새로운 심층적인 모델을 탐구해야 했습니다. 점차적으로 전송과 응답이라는 개념이 언어상에서 명확히 표현되기 시작했습니다.
 
 ## 더 깊은 모델을 향해서
 
@@ -178,111 +159,67 @@ type Node interface {
 별도로 처리되던 그래프 구조와 스택 구조를 통합하여 패킷의 계보만 스택에 저장하고, 포트가 자신이 응답받아야 하는 패킷들을 직접 저장하고 관리하게 수정되었습니다.
 
 ```go
-func TestStack_Add(t *testing.T) {
-	s := newStack()
-	defer s.Close()
+func (w *Writer) Write(pck *packet.Packet) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	pck1 := packet.New(nil)
-	pck2 := packet.New(nil)
+	if w.pipe.Links() == 0 {
+		w.stack.Clear(pck)
+		return
+	}
 
-	s.Add(nil, pck1)
-	assert.True(t, s.Has(nil, pck1))
+	var stem *packet.Packet
+	if w.stack.Has(nil, pck) {
+		stem = pck
+		pck = packet.New(stem.Payload())
+	}
 
-	s.Add(nil, pck2)
-	assert.True(t, s.Has(nil, pck2))
-
-	s.Add(pck1, pck2)
-	assert.True(t, s.Has(pck1, pck2))
+	w.written = append(w.written, pck)
+	w.stack.Add(stem, pck)
+	w.pipe.Write(pck)
 }
 
-func TestStack_Unwind(t *testing.T) {
-	s := newStack()
-	defer s.Close()
+func (w *Writer) pop(pck *packet.Packet) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 
-	pck1 := packet.New(nil)
-	pck2 := packet.New(nil)
-	pck3 := packet.New(nil)
-
-	s.Add(pck1, pck2)
-	s.Add(pck2, pck3)
-
-	s.Unwind(pck3, pck2)
-	assert.False(t, s.Has(pck2, pck3))
-	assert.False(t, s.Has(nil, pck2))
-	assert.False(t, s.Has(nil, pck3))
-
-	s.Unwind(pck3, pck1)
-	assert.False(t, s.Has(nil, pck1))
-}
-
-func TestIO_WriteAndRead(t *testing.T) {
-	proc := process.New()
-	defer proc.Close()
-
-	w := newWriter(proc.Stack(), 0)
-	defer w.Close()
-
-	r := newReader(proc.Stack(), 0)
-	defer r.Close()
-
-	w.link(r)
-
-	pck1 := packet.New(nil)
-	pck2 := packet.New(nil)
-
-	w.Write(pck1)
-	w.Write(pck2)
-
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
-	defer cancel()
-
-	select {
-	case pck := <-r.Read():
-		r.Receive(pck)
-	case <-ctx.Done():
-		assert.NoError(t, ctx.Err())
+	for len(w.written) > 0 && !w.stack.Has(nil, w.written[0]) {
+		w.written = w.written[1:]
 	}
 
-	select {
-	case pck := <-r.Read():
-		proc.Stack().Clear(pck)
-	case <-ctx.Done():
-		assert.NoError(t, ctx.Err())
+	for i := 0; i < len(w.written); i++ {
+		if w.stack.Cost(w.written[i], pck) == 0 {
+			w.stack.Unwind(pck, w.written[i])
+			w.written = append(w.written[:i], w.written[i+1:]...)
+			return true
+		}
 	}
-
-	select {
-	case <-w.Receive():
-	case <-ctx.Done():
-		assert.NoError(t, ctx.Err())
-	}
+	return false
 }
 ```
 
 변경된 포트는 명확하게 패킷의 작성과 읽기, 그리고 응답이란 과정을 표현하게 되었고, 기존에 노드들에 흩어져 있던 지식은 응집되었습니다.
 
 ```go
+// In 포트에서 Out 포트로 순방향 전파
 inReader := n.inPort.Open(proc)
 outWriter := n.outPort.Open(proc)
 
 for {
-    inPck, ok := <-inReader.Read()
-    if !ok {
-        return
-    }
+  inPck, ok := <-inReader.Read()
+  if !ok {
+      return
+  }
 
-    if outPck, errPck := n.action(proc, inPck); errPck != nil {
-        proc.Stack().Add(inPck, errPck)
-        n.throw(proc, errPck)
-    } else if outPck != nil {
-        proc.Stack().Add(inPck, outPck)
-        outWriter.Write(outPck)
-    } else {
-        proc.Stack().Clear(inPck)
-    }
+  // 패킷 처리...
+
+  proc.Stack().Add(inPck, outPck)
+  outWriter.Write(outPck)
 }
 ```
 
 ```go
+// Out 포트에서 In 포트로 역방향 전파
 inReader := n.inPort.Open(proc)
 outWriter := n.outPort.Open(proc)
 
