@@ -9,7 +9,7 @@ tags: ["network", "http", "oauth2"]
 
 다른 출처에 있는 리소스가 필요한 경우, 추가 HTTP 헤더를 사용하여 한 출처에서 실행 중인 웹 애플리케이션이 다른 출처의 선택한 자원에 접근할 수 있는 권한을 부여하여 교차 출처 리소스 공유(CORS, Cross-Origin Resource Sharing)를 허용합니다.
 
-웹 브라우저는 다른 출처에 있는 리소스에 접근할 때 `OPTIONS` 메서드를 통해 Preflight 요청을 보내어 실제 요청이 전송하기에 안전한지 확인합니다. 이때 `Origin` 헤더를 사용하여 원래 출처를 전달하고, `Access-Control-Request-Method`와 `Access-Control-Request-Headers`에 허용되어야 할 메서드와 헤더를 넣습니다.
+웹 브라우저는 다른 출처에 있는 리소스에 접근할 때 `OPTIONS` 메소드를 통해 Preflight 요청을 보내어 실제 요청이 전송하기에 안전한지 확인합니다. 이때 `Origin` 헤더를 사용하여 원래 출처를 전달하고, `Access-Control-Request-Method`와 `Access-Control-Request-Headers`에 허용되어야 할 메소드와 헤더를 넣습니다.
 
 ```http
 OPTIONS https://siyul-park.github.io
@@ -19,7 +19,7 @@ Access-Control-Request-Method: GET
 Access-Control-Request-Headers: Content-type
 ```
 
-서버는 이에 대한 응답으로 허용하는 출처, 메서드, 헤더를 반환합니다.
+서버는 이에 대한 응답으로 허용하는 출처, 메소드, 헤더를 반환합니다.
 
 ```http
 OPTIONS https://siyul-park.github.io/ 200 OK
@@ -29,7 +29,7 @@ Access-Control-Allow-Methods: GET
 Access-Control-Allow-Headers: Content-type
 ```
 
-일부 요청은 Preflight를 전송하지 않고도 다른 출처에 있는 리소스에 접근할 수 있습니다. 이런 요청을 단순 요청(Simple Request)라고 합니다. 단순 요청은 `GET`, `HEAD`, `POST` 메서드를 사용하고 유저 에이전트가 자동으로 설정한 헤더 외에 `Accept`, `Accept-Language`, `Content-Language`, `Content-Type` 헤더만 사용할 수 있습니다. 또한 `Content-Type`은 `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` 만 허용합니다.
+일부 요청은 Preflight를 전송하지 않고도 다른 출처에 있는 리소스에 접근할 수 있습니다. 이런 요청을 단순 요청(Simple Request)라고 합니다. 단순 요청은 `GET`, `HEAD`, `POST` 메소드를 사용하고 유저 에이전트가 자동으로 설정한 헤더 외에 `Accept`, `Accept-Language`, `Content-Language`, `Content-Type` 헤더만 사용할 수 있습니다. 또한 `Content-Type`은 `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain` 만 허용합니다.
 
 다른 출저로 리소스 공유가 필요하지만 요청의 출처를 명확히 알 수 없는 경우, 단순 요청을 사용하여 API를 설계할 수 있습니다.
 
