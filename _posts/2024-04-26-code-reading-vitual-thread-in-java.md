@@ -379,6 +379,80 @@ private boolean yield0(ContinuationScope scope, Continuation child) {
 }
 ```
 
+`doYield`은 `freeze`를 호출하여 현재 스택을 힙에 복사하여 저장합니다.
+
+```
+Thread-stack layout on freeze/thaw.
+See corresponding stack-chunk layout in instanceStackChunkKlass.hpp
+
+            +----------------------------+
+            |      .                     |
+            |      .                     |
+            |      .                     |
+            |   carrier frames           |
+            |                            |
+            |----------------------------|
+            |                            |
+            |    Continuation.run        |
+            |                            |
+            |============================|
+            |    enterSpecial frame      |
+            |  pc                        |
+            |  rbp                       |
+            |  -----                     |
+        ^   |  int argsize               | = ContinuationEntry
+        |   |  oopDesc* cont             |
+        |   |  oopDesc* chunk            |
+        |   |  ContinuationEntry* parent |
+        |   |  ...                       |
+        |   |============================| <------ JavaThread::_cont_entry = entry->sp()
+        |   |  ? alignment word ?        |
+        |   |----------------------------| <--\
+        |   |                            |    |
+        |   |  ? caller stack args ?     |    |   argsize (might not be 2-word aligned) words
+Address |   |                            |    |   Caller is still in the chunk.
+        |   |----------------------------|    |
+        |   |  pc (? return barrier ?)   |    |  This pc contains the return barrier when the bottom-most frame
+        |   |  rbp                       |    |  isn't the last one in the continuation.
+        |   |                            |    |
+        |   |    frame                   |    |
+        |   |                            |    |
+            +----------------------------|     \__ Continuation frames to be frozen/thawed
+            |                            |     /
+            |    frame                   |    |
+            |                            |    |
+            |----------------------------|    |
+            |                            |    |
+            |    frame                   |    |
+            |                            |    |
+            |----------------------------| <--/
+            |                            |
+            |    doYield/safepoint stub  | When preempting forcefully, we could have a safepoint stub
+            |                            | instead of a doYield stub
+            |============================| <- the sp passed to freeze
+            |                            |
+            |  Native freeze/thaw frames |
+            |      .                     |
+            |      .                     |
+            |      .                     |
+            +----------------------------+
+```
+
+```c++
+// Entry point to freeze. Transitions are handled manually
+// Called from gen_continuation_yield() in sharedRuntime_<cpu>.cpp through Continuation::freeze_entry();
+template<typename ConfigT>
+static JRT_BLOCK_ENTRY(int, freeze(JavaThread* current, intptr_t* sp))
+  assert(sp == current->frame_anchor()->last_Java_sp(), "");
+
+  if (current->raw_cont_fastpath() > current->last_continuation()->entry_sp() || current->raw_cont_fastpath() < sp) {
+    current->set_cont_fastpath(nullptr);
+  }
+
+  return ConfigT::freeze(current, sp);
+JRT_END
+```
+
 다시 가상 스레드가 실행되면 `unpark` 메소드가 호출되어 유저 스레드에 마운트되고 컨텍스트가 로딩됩니다. `unpark`는 `submitRunContinuation`를 호출하여 상태를 `RUNNING`으로 변경하고 등록된 작업을 다시 시작합니다. 만약 상태가 `PINNED`이면 이미 스레드가 마운트되어 있으므로 이미 마운트된 스레드를 재개합니다.
 
 ```java
