@@ -282,7 +282,7 @@ func (p *OutPort) Open(proc *process.Process) *packet.Writer {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 
-    delete(p.writers, proc)
+		delete(p.writers, proc)
 		writer.Close()
 	}))
 
